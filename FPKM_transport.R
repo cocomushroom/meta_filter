@@ -9,16 +9,19 @@
 ### At the end of the file there is DEseq2 analysis
 
 
-setwd("/Users/kc178/Documents/nutrient/clean_up/BOWTIE2_filter/")
-table<-read.delim("/Users/kc178/Documents/nutrient/clean_up/BOWTIE2_filter//TMBTMBTMB_length",header=TRUE)
 
 #unwant_blast<- read.delim("/Users/kc178/Documents/nutrient/check_fungi_uni/unwant_15")
-#unwant_trino <- read.delim("/Users/kc178/Documents/nutrient/clean_up/BOWTIE2_filter/trinotate_based_filter_Trinityname")
+#unwant_trino <- read.delim("/Users/kc178/Documents/nutrient/clean_up/BOWTIE2_filter/trinotate_based_filter_Trinityname_0115")
+#unwant_blast_unlist <- as.vector(unwant_blast)
+#unwant_trino_unlist <- as.vector(unwant_trino)
+#combine_unwant<-c(unwant_blast_unlist,unwant_trino_unlist)
+#unwant<-unique(combine_unwant)
+#unwant <- as.vector(unwant)
 
-sq<-read.delim("/Users/kc178/Documents/nutrient/clean_up/BOWTIE2_filter//report.sqlite",header=TRUE)
 
-filter<-read.delim("/Users/kc178/Documents/nutrient/clean_up/BOWTIE2_filter/combine_filter_0111",header=F)
+filter<-read.delim("/Users/kc178/Documents/nutrient/clean_up/BOWTIE2_filter/combine_filter_0115",header=F)
 unwant<-unique(filter)
+
 nrow(unwant)
 
 #test <- c(unwant_blast,unwant_trino)
@@ -41,16 +44,76 @@ keep<-dim(non_del)
 supposed_keep<-all-removed ## The number doesn't exactly match, the "unwant" list might be generated prior to this batch of sequences
 
 
-## To look at genes related to transport (transmembrane transport, transmembrane transporter)
-transport <- read.delim("/Users/kc178/Documents/nutrient/clean_up/BOWTIE2_filter/trinotate_based_transmembrane", header=F)
-transport_row<-non_del[,1] %in% transport[,1]
+## output transmembrane annotation ##
+del_sq <-sq[,2] %in% unwant[,1]
+sq_clean <- sq[!del_sq,]
+sq_transport<-sq_clean[,2] %in% ANPC_transport_name
+write.table(sq_clean[sq_transport,], row.names=FALSE, col.names=FALSE, quote=FALSE, "sq_transport_ACPN.txt")
+
+nrow(sq_clean[sq_transport,2])
+
+transport_row<-non_del[,1] %in% ANPC_transport_name
 transporter_name <- non_del[transport_row,]
 
 
+######## Start here ####
+setwd("/Users/kc178/Documents/nutrient/clean_up/BOWTIE2_filter/")
+table<-read.delim("/Users/kc178/Documents/nutrient/clean_up/BOWTIE2_filter//TMBTMBTMB_length",header=TRUE)
+sq<-read.delim("/Users/kc178/Documents/nutrient/clean_up/BOWTIE2_filter//report.sqlite",header=TRUE)
+
+#### Append nutrient type information (P, N, C, A)
+
+A_name <- read.delim("/Users/kc178/Documents/nutrient/clean_up/BOWTIE2_filter/transport_name/AA_name",header=F)
+N_name <-read.delim("/Users/kc178/Documents/nutrient/clean_up/BOWTIE2_filter/transport_name/nitrogen_name",header=F)
+P_name <- read.delim("/Users/kc178/Documents/nutrient/clean_up/BOWTIE2_filter/transport_name/pho_name",header=F)
+C_name <- read.delim("/Users/kc178/Documents/nutrient/clean_up/BOWTIE2_filter/transport_name/sugar_name",header=F)
+
+
+A_name<-unique(A_name)
+N_name<-unique(N_name)
+P_name<-unique(P_name)
+C_name<-unique(C_name)
+
+for (i in 1:nrow(A_name)) {
+  A_name[i,2] <- "AA"
+}
+for (i in 1:nrow(N_name)) {
+  N_name[i,2] <- "N"
+}
+for (i in 1:nrow(P_name)) {
+  P_name[i,2] <- "P"
+}
+for (i in 1:nrow(C_name)) {
+  C_name[i,2] <- "C"
+}
+
+
+ANPC_transport_name_cat <-rbind(A_name,N_name,P_name,C_name)
+colnames(ANPC_transport_name_cat)[1]<-"ID"
+colnames(ANPC_transport_name_cat)[2]<-"cat"
+
+ANPC_transport_name<-unique(c(as.vector(A_name[,1]),as.vector(P_name[,1]), as.vector(N_name[,1]), as.vector(C_name[,1])))
+
+ANPC_bowtie_row <- table[,1] %in% ANPC_transport_name
+ANPC_bowtie<-table[ANPC_bowtie_row,]
+
+
+## To look at genes related to transport (transmembrane transport, transmembrane transporter)
+#transport <- read.delim("/Users/kc178/Documents/nutrient/clean_up/BOWTIE2_filter/trinotate_based_transport", header=F)
+
+#ANPC_transport_name<-c(as.vector(A_name[,1]),as.vector(P_name[,1]), as.vector(N_name[,1]), as.vector(C_name[,1]))
+
+
+
+
+
+## Just for double check if something is duplicated
+##dup<-duplicated(ANPC_transport_name)
+##ANPC_transport_name[dup]
 
 ### prepare table format##
-table_num<-transport_name[2:11] ## this variable is used for the DEseq2 too
-row.names(table_num)<-non_del[,1]
+table_num<-ANPC_bowtie[2:11] ## this variable is used for the DEseq2 too
+row.names(table_num)<-ANPC_bowtie[,1]
 head(table_num,n=10)
 nrow(table_num)
 
@@ -64,6 +127,7 @@ for (p in 1:9) {
   table_num[[name[[p]]]]<-(table_num[,p]*10^9)/sum(table_num[,p])/table_num$length
 }
 
+dim(table_num)
 #################
 ####Order combine layers####
 
@@ -89,26 +153,34 @@ order_t <- order(OTU3[,1], decreasing=T)
 order_m<-order(OTU3[,2], decreasing=T)
 order_b<-order(OTU3[,3], decreasing=T)
 
-ID_t150 <- row.names(OTU3[(order_t[1:150]),])
-ID_m150 <- row.names(OTU3[(order_m[1:150]),])
-ID_b150 <- row.names(OTU3[(order_b[1:150]),])
+ID_t100 <- row.names(OTU3[(order_t[1:100]),])
+ID_m100 <- row.names(OTU3[(order_m[1:100]),])
+ID_b100 <- row.names(OTU3[(order_b[1:100]),])
 
 
 #####find annotation for the transcripts with high ranking in combined set####
 
-anno_t150<-sq[,2] %in% ID_t150
-anno_m150<-sq[,2] %in% ID_m150
-anno_b150<-sq[,2] %in% ID_b150
+t100_cat<-ANPC_transport_name_cat[ANPC_transport_name_cat$ID %in% ID_t100,2]
+m100_cat<-ANPC_transport_name_cat[ANPC_transport_name_cat$ID %in% ID_m100,2]
+b100_cat<-ANPC_transport_name_cat[ANPC_transport_name_cat$ID %in% ID_b100,2]
 
-t150_function <-sq[anno_t150,]
-m150_function <-sq[anno_m150,]
-b150_function <-sq[anno_b150,]
+#tmb_bind<-cbind(t100_cat,m100_cat, b100_cat)
+#table(tmb_bind)
 
-write.table(t150_function, row.names=FALSE, col.names=FALSE, quote=FALSE, "t150_unwant_remove.txt")
-write.table(m150_function, row.names=FALSE, col.names=FALSE, quote=FALSE, "m150_unwant_remove.txt")
-write.table(b150_function, row.names=FALSE, col.names=FALSE, quote=FALSE, "b150_unwant_remove.txt")
+table(t100_cat)
+table(m100_cat)
+table(b100_cat)
+
+#anno_b100<-sq[,2] %in% ID_b100
+
+#t100_function <-sq[anno_t100,]
+#m100_function <-sq[anno_m100,]
+#b100_function <-sq[anno_b100,]
+
+#write.table(t100_function, row.names=FALSE, col.names=FALSE, quote=FALSE, "t100_unwant_remove.txt")
+#write.table(m100_function, row.names=FALSE, col.names=FALSE, quote=FALSE, "m100_unwant_remove.txt")
+#write.table(b100_function, row.names=FALSE, col.names=FALSE, quote=FALSE, "b100_unwant_remove.txt")
 ##### 
-
 ########
 
 
@@ -117,58 +189,59 @@ write.table(b150_function, row.names=FALSE, col.names=FALSE, quote=FALSE, "b150_
 
 ########Order by per sample#########
 t1_order<- order(table_num$t1_RPKM, decreasing=TRUE)
-t1_150_ID<-row.names(table_num[t1_order[1:150],])
+t1_100_ID<-row.names(table_num[t1_order[1:100],])
 
 t2_order<- order(table_num$t2_RPKM, decreasing=TRUE)
-t2_150_ID<-row.names(table_num[t2_order[1:150],])
+t2_100_ID<-row.names(table_num[t2_order[1:100],])
 
 t3_order<- order(table_num$t3_RPKM, decreasing=TRUE)
-t3_150_ID<-row.names(table_num[t3_order[1:150],])
+t3_100_ID<-row.names(table_num[t3_order[1:100],])
 
-#t12<-intersect(t1_order[1:150],t2_order[1:150])
-#t123<-intersect(t12,t3_order[1:150])
+#t12<-intersect(t1_order[1:100],t2_order[1:100])
+#t123<-intersect(t12,t3_order[1:100])
 
-#t12_u<-union(t1_order[1:150],t2_order[1:150])
-#t123_u<-union(t12_u,t3_order[1:150])
+#t12_u<-union(t1_order[1:100],t2_order[1:100])
+#t123_u<-union(t12_u,t3_order[1:100])
 
-#write.table(t1_150_ID, row.names=FALSE, col.names=FALSE, quote=FALSE, "t1.txt")
+#write.table(t1_100_ID, row.names=FALSE, col.names=FALSE, quote=FALSE, "t1.txt")
 
 #ID_t123_union<-row.names(table_num[t123_u,])
 #write.table(ID_t123_union, row.names = FALSE, col.names=FALSE, quote=FALSE, "t123_union.txt")
 
 
 m1_order<- order(table_num$m1_RPKM, decreasing=TRUE)
-m1_150_ID<-row.names(table_num[m1_order[1:150],])
+m1_100_ID<-row.names(table_num[m1_order[1:100],])
 
 m2_order<- order(table_num$m2_RPKM, decreasing=TRUE)
-m2_150_ID<-row.names(table_num[m2_order[1:150],])
+m2_100_ID<-row.names(table_num[m2_order[1:100],])
 
 m3_order<- order(table_num$m3_RPKM, decreasing=TRUE)
-m3_150_ID<-row.names(table_num[m3_order[1:150],])
+m3_100_ID<-row.names(table_num[m3_order[1:100],])
 
 
 
 b1_order<- order(table_num$b1_RPKM, decreasing=TRUE)
-b1_150_ID<-row.names(table_num[b1_order[1:150],])
+b1_100_ID<-row.names(table_num[b1_order[1:100],])
 
 b2_order<- order(table_num$b2_RPKM, decreasing=TRUE)
-b2_150_ID<-row.names(table_num[b2_order[1:150],])
+b2_100_ID<-row.names(table_num[b2_order[1:100],])
 
 b3_order<- order(table_num$b3_RPKM, decreasing=TRUE)
-b3_150_ID<-row.names(table_num[b3_order[1:150],])
+b3_100_ID<-row.names(table_num[b3_order[1:100],])
 
 #####  Summarize SeqID names for manual annotation####
 
-tmb_123tmb_150_ID <- c(ID_t150,ID_m150,ID_b150,t1_150_ID,t2_150_ID, t3_150_ID, m1_150_ID, m2_150_ID, m3_150_ID, b1_150_ID, b2_150_ID, b3_150_ID)
-length(tmb_123tmb_150_ID)
-uniq_tmb_123tmb_150_ID<-unique(tmb_123tmb_150_ID)
-length(uniq_tmb_123tmb_150_ID)
+tmb_123tmb_100_ID <- c(ID_t100,ID_m100,ID_b100,t1_100_ID,t2_100_ID, t3_100_ID, m1_100_ID, m2_100_ID, m3_100_ID, b1_100_ID, b2_100_ID, b3_100_ID)
+length(tmb_123tmb_100_ID)
+uniq_tmb_123tmb_100_ID<-unique(tmb_123tmb_100_ID)
+length(uniq_tmb_123tmb_100_ID)
 
-anno_uniq_tmb_123tmb_150_ID<-sq[,2] %in% uniq_tmb_123tmb_150_ID
+anno_uniq_tmb_123tmb_100_ID<-sq[,2] %in% uniq_tmb_123tmb_100_ID
 
-uniq_tmb_123tmb_150_ID_function <-sq[anno_uniq_tmb_123tmb_150_ID,]
+uniq_tmb_123tmb_100_ID_function <-sq[anno_uniq_tmb_123tmb_100_ID,]
 
-write.table(uniq_tmb_123tmb_150_ID_function, row.names=FALSE, col.names=FALSE, quote=FALSE, "uniq_tmb_123tmb_150_ID_function_transport0111.txt")
+write.table(uniq_tmb_123tmb_100_ID_function, row.names=FALSE, col.names=FALSE, quote=FALSE, "uniq_tmb_123tmb_100_ID_function_transport0111.txt")
+
 
 
 
@@ -231,6 +304,96 @@ mat <- as.matrix(distsRL)
 rownames(mat) <- colnames(mat) <- with(colData(ddsC), paste(condition, type, sep=" : "))
 hc <- hclust(distsRL)
 heatmap.2(mat, Rowv=as.dendrogram(hc), symm=TRUE, trace="none", col = rev(blue_yellow), margin=c(10, 10))
+
+
+## 
+C_resTBP <- C_resTB$padj
+C_resTBP_T <- C_resTBP < 0.05
+#c: "which" can give the index of whatever are true
+#list of genes with p< certain thC_reshold  in Top vs. Bottom comparison
+C_resTBP_T_index  <- which(C_resTBP_T)
+length(C_resTBP_T_index)
+
+C_resTMP <- C_resTM$padj
+C_resTMP_T <- C_resTMP < 0.05
+#c: "which" can give the index of whatever are true
+#list of genes with p< certain thC_reshold  in Top vs. Bottom comparison
+C_resTMP_T_index  <- which(C_resTMP_T)
+length(C_resTMP_T_index)
+
+C_resMBP <- C_resMB$padj
+C_resMBP_T <- C_resMBP < 0.05
+#c: "which" can give the index of whatever are true
+#list of genes with p< certain thC_reshold  in Top vs. Bottom comparison
+C_resMBP_T_index  <- which(C_resMBP_T)
+length(C_resMBP_T_index)
+
+
+#common listc
+common <- abs(C_resTB$log2FoldChange) < log2(2)
+commonnames <- C_resTB@rownames[common]
+
+commonP <- C_resTB$padj > 0.05
+commonP[is.na(commonP)] <- F
+commonPnames <- C_resTB@rownames[commonP]
+
+common2P <- common & commonP
+common2Pnames <- C_resTB@rownames[common2P]
+
+##check up- down- regulated ones
+
+sigTB <- C_resTB$padj < 0.05
+TBup <- C_resTB$log2FoldChange > log2(4) ## fold change >1=> logfoldchange >0
+sigTBup <- sigTB & TBup
+sigTBup[is.na(sigTBup)] <- F## this truns NA to false so only the true ones will be printed out
+
+TBnamesup <- C_resTB@rownames[sigTBup]
+TBup[is.na(TBup)]<-F
+TBlogup<-as.vector(C_resTB@rownames[TBup])
+write.csv(TBlogup,row.names=FALSE, "TBlogup.csv")
+
+gup <- genus[TBnamesup]
+write.csv(TBnamesup, row.names = FALSE, "TBnamesup.csv")
+length(TBnamesup)
+
+TBdown <- C_resTB$log2FoldChange < -log2(4)
+sigTBdown <- sigTB & TBdown
+sigTBdown[is.na(sigTBdown)] <- F 
+TBdown[is.na(TBdown)]<-F
+TBlogdown<-as.vector(C_resTB@rownames[TBdown])
+TBnamesdown <- C_resTB@rownames[sigTBdown]
+length(TBnamesdown)
+
+sigTBup_cat<-ANPC_transport_name_cat$ID %in% TBnamesup
+sigTBdown_cat<-ANPC_transport_name_cat$ID %in% TBnamesdown
+
+heatmap.2(assay(vsd)[sigTBup,], labRow=ANPC_transport_name_cat$cat[sigTBup_cat], main = c("top layer", "up regulated genes"), col = blue_yellow, Rowv = TRUE, Colv = FALSE, scale="none", 
+          dendrogram="row", trace="none", margin=c(3, 8), cexCol = 1, cexRow=0.9, srtCol=70, keysize=1.5, density.info="none")
+
+heatmap.2(assay(vsd)[sigTBdown,], labRow=ANPC_transport_name_cat$cat[sigTBdown_cat], main = c("bottom layer", "up regulated genes"), col = blue_yellow, Rowv = TRUE, Colv = FALSE, scale="none", 
+          dendrogram="row", trace="none", margin=c(3, 8), cexCol = 1, cexRow=0.9, srtCol=70, keysize=1.5, density.info="none")
+
+table(ANPC_transport_name_cat$cat[sigTBup_cat])
+table(ANPC_transport_name_cat$cat[sigTBdown_cat])
+
+#test
+png("LR3_MA_2P.png", width=1200, height=1000)
+par(font.axis=3)#make label italic#
+par(cex.main=3) #change main title size
+heatmap.2(assay(vsd)[common2P,], labRow=genus[common2Pnames], 
+          main = c("taxa equally presented: LR3-MA"), 
+          col = blue_yellow, Rowv = TRUE, Colv = FALSE, scale="none", 
+          dendrogram="row", trace="none", margin=c(6, 24.2), 
+          cexCol = 3.2, cexRow=2.9, srtCol=70, keysize=0.75, 
+          density.info="none", key.par=list(cex.lab=2.2, cex.axis=2.2, cex.main=2.5),
+          RowSideColors=unlist(pcol3[common2Pnames],
+                               
+          )  )
+dev.off()
+
+
+
+
 
 
 
